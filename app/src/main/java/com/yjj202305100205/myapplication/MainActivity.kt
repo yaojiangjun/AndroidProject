@@ -10,29 +10,23 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import java.util.UUID
 
-// 数据类：历史记录实体
-data class InputRecord(
-    val id: String, // 唯一标识
-    val content: String, // 输入内容
-    val time: Long // 时间戳（用于排序）
-)
-
-// RecyclerView适配器
+// RecyclerView适配器（无需修改，仅适配Record类）
 class RecordAdapter(
-    private val onDeleteClick: (InputRecord) -> Unit
-) : androidx.recyclerview.widget.ListAdapter<InputRecord, RecordAdapter.ViewHolder>(RecordDiffCallback()) {
+    private val onDeleteClick: (Record) -> Unit
+) : androidx.recyclerview.widget.ListAdapter<Record, RecordAdapter.ViewHolder>(RecordDiffCallback()) {
 
     inner class ViewHolder(itemView: android.view.View) : androidx.recyclerview.widget.RecyclerView.ViewHolder(itemView) {
         val contentTextView: TextView = itemView.findViewById(R.id.contentTextView)
         val deleteButton: Button = itemView.findViewById(R.id.deleteButton)
 
-        fun bind(record: InputRecord) {
+        fun bind(record: Record) {
             contentTextView.text = record.content
             deleteButton.setOnClickListener {
                 onDeleteClick(record)
@@ -50,13 +44,12 @@ class RecordAdapter(
         holder.bind(getItem(position))
     }
 
-    // DiffUtil：优化列表刷新
-    private class RecordDiffCallback : androidx.recyclerview.widget.DiffUtil.ItemCallback<InputRecord>() {
-        override fun areItemsTheSame(oldItem: InputRecord, newItem: InputRecord): Boolean {
+    private class RecordDiffCallback : androidx.recyclerview.widget.DiffUtil.ItemCallback<Record>() {
+        override fun areItemsTheSame(oldItem: Record, newItem: Record): Boolean {
             return oldItem.id == newItem.id
         }
 
-        override fun areContentsTheSame(oldItem: InputRecord, newItem: InputRecord): Boolean {
+        override fun areContentsTheSame(oldItem: Record, newItem: Record): Boolean {
             return oldItem == newItem
         }
     }
@@ -64,14 +57,8 @@ class RecordAdapter(
 
 // 主Activity
 class MainActivity : AppCompatActivity() {
-    // SharedPreferences相关常量
-    companion object {
-        private const val PREF_NAME = "InputHistory"
-        private const val KEY_RECORDS = "all_records" // 保存所有记录
-    }
-
     private lateinit var recordAdapter: RecordAdapter
-    private val records = mutableListOf<InputRecord>()
+    private lateinit var recordDao: RecordDao
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,17 +72,28 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
+        // 初始化Room数据库和Dao
+        val db = AppDatabase.getInstance(this)
+        recordDao = db.recordDao()
+
         // 初始化RecyclerView
         val recyclerView = findViewById<RecyclerView>(R.id.historyRecyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recordAdapter = RecordAdapter { record ->
-            // 删除单条记录
-            deleteRecord(record)
+            // 删除单条记录（协程执行）
+            lifecycleScope.launch {
+                recordDao.deleteRecord(record)
+                Toast.makeText(this@MainActivity, "删除成功", Toast.LENGTH_SHORT).show()
+            }
         }
         recyclerView.adapter = recordAdapter
 
-        // 加载历史记录
-        loadRecords()
+        // 监听数据库数据变化，自动刷新列表
+        lifecycleScope.launch {
+            recordDao.getAllRecords().collect { records ->
+                recordAdapter.submitList(records)
+            }
+        }
 
         // 控件初始化
         val inputEditText = findViewById<EditText>(R.id.inputEditText)
@@ -110,13 +108,15 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "请输入内容", Toast.LENGTH_SHORT).show()
             } else {
                 resultTextView.text = "你输入的是：$inputText"
-                // 保存新记录
-                val newRecord = InputRecord(
+                // 创建新记录并插入数据库（协程执行）
+                val newRecord = Record(
                     id = UUID.randomUUID().toString(),
                     content = inputText,
                     time = System.currentTimeMillis()
                 )
-                saveRecord(newRecord)
+                lifecycleScope.launch {
+                    recordDao.insertRecord(newRecord)
+                }
                 // 跳转第二页
                 val intent = Intent(this, SecondActivity::class.java)
                 intent.putExtra("input_data", inputText)
@@ -127,47 +127,10 @@ class MainActivity : AppCompatActivity() {
 
         // 清空按钮点击事件
         clearButton.setOnClickListener {
-            clearAllRecords()
-            Toast.makeText(this, "已清空所有历史", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch {
+                recordDao.deleteAllRecords()
+                Toast.makeText(this@MainActivity, "已清空所有历史", Toast.LENGTH_SHORT).show()
+            }
         }
-    }
-
-    // 加载所有记录
-    private fun loadRecords() {
-        val sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE)
-        val json = sp.getString(KEY_RECORDS, "[]") ?: "[]"
-        val type = object : TypeToken<List<InputRecord>>() {}.type
-        val savedRecords = Gson().fromJson<List<InputRecord>>(json, type)
-        records.clear()
-        records.addAll(savedRecords.sortedByDescending { it.time }) // 按时间倒序
-        recordAdapter.submitList(records.toList())
-    }
-
-    // 保存单条记录
-    private fun saveRecord(record: InputRecord) {
-        records.add(0, record) // 添加到头部
-        updateRecordsInSP()
-        recordAdapter.submitList(records.toList())
-    }
-
-    // 删除单条记录
-    private fun deleteRecord(record: InputRecord) {
-        records.removeAll { it.id == record.id }
-        updateRecordsInSP()
-        recordAdapter.submitList(records.toList())
-    }
-
-    // 清空所有记录
-    private fun clearAllRecords() {
-        records.clear()
-        updateRecordsInSP()
-        recordAdapter.submitList(emptyList())
-    }
-
-    // 更新SP中的记录
-    private fun updateRecordsInSP() {
-        val sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE)
-        val json = Gson().toJson(records)
-        sp.edit().putString(KEY_RECORDS, json).apply()
     }
 }
