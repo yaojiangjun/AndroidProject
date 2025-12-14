@@ -4,25 +4,30 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp"
     tools:context=".SecondActivity">
 
     <TextView
-        android:id="@+id/receivedDataTextView"
-        android:layout_width="wrap_content"
+        android:id="@+id/showTextView"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="接收的数据将显示在这里"
-        android:textSize="16sp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:textSize="18sp"
+        android:textColor="?attr/colorOnBackground"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginTop="32dp"
+        android:paddingHorizontal="16dp"/>
 
+    <!-- 修复按钮样式 -->
     <Button
         android:id="@+id/backButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="返回首页"
+        android:text="@string/back"
+        android:backgroundTint="?attr/colorPrimary"
+        android:textColor="?attr/colorOnPrimary"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/receivedDataTextView"
-        android:layout_marginTop="16dp"/>
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="32dp"
+        android:onClick="onBackClick"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

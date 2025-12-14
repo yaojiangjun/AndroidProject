@@ -34,19 +34,19 @@ android {
 }
 
 dependencies {
-
+    // 保留版本目录的引用（删除直接写坐标的重复依赖）
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
-    implementation(libs.material)
+    implementation(libs.material)  // 这行对应Material3依赖，无需额外写坐标
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    implementation("com.google.code.gson:gson:2.10.1")//新增
-    // Room 核心依赖
+
+    // Room相关依赖（保留）
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")
-    implementation("androidx.room:room-ktx:$roomVersion") // 支持协程
-    kapt("androidx.room:room-compiler:$roomVersion") // 注解处理器
+    implementation("androidx.room:room-ktx:$roomVersion")
+    kapt("androidx.room:room-compiler:$roomVersion")
 }

@@ -4,32 +4,41 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
-import androidx.room.Update // 新增：导入Update注解（之前缺失导致报错）
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RecordDao {
-    // 插入单条记录（重复主键会替换）
     @Insert
     suspend fun insertRecord(record: Record)
 
-    // 删除单条记录
     @Delete
     suspend fun deleteRecord(record: Record)
 
-    // 删除所有记录
     @Query("DELETE FROM input_records")
     suspend fun deleteAllRecords()
 
-    // 查询所有记录（按时间倒序，Flow自动监听数据变化）
-    @Query("SELECT * FROM input_records ORDER BY time DESC")
+    // 按置顶+时间排序（置顶的在前）
+    @Query("SELECT * FROM input_records ORDER BY isTop DESC, time DESC")
     fun getAllRecords(): Flow<List<Record>>
 
-    // 模糊搜索记录
-    @Query("SELECT * FROM input_records WHERE content LIKE '%' || :keyword || '%' ORDER BY time DESC")
+    @Query("SELECT * FROM input_records WHERE content LIKE '%' || :keyword || '%' ORDER BY isTop DESC, time DESC")
     fun searchRecords(keyword: String): Flow<List<Record>>
 
-    // 更新记录
     @Update
     suspend fun updateRecord(record: Record)
+
+    // 统计：各分类记录数
+    @Query("SELECT c.categoryName, COUNT(r.id) as count FROM categories c LEFT JOIN input_records r ON c.categoryId = r.categoryId GROUP BY c.categoryId")
+    fun getCategoryCount(): Flow<List<CategoryCount>>
+
+    // 统计：总记录数
+    @Query("SELECT COUNT(*) FROM input_records")
+    suspend fun getTotalRecordCount(): Int
 }
+
+// 新增：分类统计数据类
+data class CategoryCount(
+    val categoryName: String,
+    val count: Int
+)

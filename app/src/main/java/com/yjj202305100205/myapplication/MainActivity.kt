@@ -2,16 +2,23 @@ package com.yjj202305100205.myapplication
 
 import android.Manifest
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.database.Cursor
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import android.view.View
-import android.view.ViewGroup // 新增：导入ViewGroup（之前缺失导致报错）
+import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -23,52 +30,22 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
+import java.nio.charset.Charset
+import java.text.SimpleDateFormat
 import java.util.*
+import android.view.LayoutInflater
+import androidx.activity.result.ActivityResultLauncher
 
-// 记录适配器（包含删除、编辑回调）
-class RecordAdapter(
-    private val onDeleteClick: (Record) -> Unit,
-    private val onEditClick: (Record) -> Unit
-) : androidx.recyclerview.widget.ListAdapter<Record, RecordAdapter.ViewHolder>(RecordDiffCallback()) {
+// 全局常量
+const val PREF_NAME = "note_app_prefs"
+const val PREF_THEME = "theme_mode"
+const val THEME_LIGHT = 0
+const val THEME_DARK = 1
 
-    inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val contentTextView: TextView = itemView.findViewById(R.id.contentTextView)
-        val deleteButton: Button = itemView.findViewById(R.id.deleteButton)
-        val editButton: Button = itemView.findViewById(R.id.editButton)
-
-        fun bind(record: Record) {
-            contentTextView.text = record.content
-            deleteButton.setOnClickListener { onDeleteClick(record) }
-            editButton.setOnClickListener { onEditClick(record) }
-        }
-    }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = android.view.LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_record, parent, false)
-        return ViewHolder(view)
-    }
-
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(getItem(position))
-    }
-
-    // DiffUtil优化列表刷新
-    private class RecordDiffCallback : androidx.recyclerview.widget.DiffUtil.ItemCallback<Record>() {
-        override fun areItemsTheSame(oldItem: Record, newItem: Record): Boolean {
-            return oldItem.id == newItem.id
-        }
-
-        override fun areContentsTheSame(oldItem: Record, newItem: Record): Boolean {
-            return oldItem == newItem
-        }
-    }
-}
-
-// 主Activity（整合所有功能）
 class MainActivity : AppCompatActivity() {
     // 权限请求常量
     private val REQUEST_STORAGE_PERMISSION = 1001
+    private val REQUEST_IMAGE_PICK = 1002
     // Room相关
     private lateinit var recordDao: RecordDao
     private lateinit var categoryDao: CategoryDao
@@ -78,13 +55,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var inputEditText: EditText
     private lateinit var searchEditText: EditText
     // 数据
-    private val categoryList = mutableListOf<Category>()
+    val categoryList = mutableListOf<Category>() // 供Adapter访问
     private var selectedCategoryId = "default_category"
+    private var selectedImagePath: String? = null // 选中的图片路径
+    // 图片选择器
+    private lateinit var pickImageLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 初始化主题（必须在setContentView前）
+        initTheme()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
+
+        // 初始化图片选择器
+        initImagePicker()
 
         // 状态栏适配
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
@@ -112,7 +97,31 @@ class MainActivity : AppCompatActivity() {
         setButtonClickListeners()
     }
 
-    // 初始化所有控件（移除局部函数private修饰符，Kotlin局部函数不能加private）
+    // 初始化主题
+    private fun initTheme() {
+        val sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE)
+        val themeMode = sp.getInt(PREF_THEME, THEME_LIGHT)
+        delegate.localNightMode = if (themeMode == THEME_DARK) {
+            AppCompatDelegate.MODE_NIGHT_YES
+        } else {
+            AppCompatDelegate.MODE_NIGHT_NO
+        }
+    }
+
+    private fun initImagePicker() {
+        // 使用旧版契约处理图片选择
+        pickImageLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                val uri = result.data?.data
+                uri?.let {
+                    selectedImagePath = getRealPathFromUri(it)
+                    Toast.makeText(this, "图片已选择", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // 初始化所有控件
     fun initViews() {
         categorySpinner = findViewById(R.id.categorySpinner)
         inputEditText = findViewById(R.id.inputEditText)
@@ -124,7 +133,6 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val categories = categoryDao.getAllCategories().first()
             if (categories.isEmpty()) {
-                // 添加默认分类
                 val defaultCategories = listOf(
                     Category("default_category", "默认分类"),
                     Category("study", "学习笔记"),
@@ -145,7 +153,6 @@ class MainActivity : AppCompatActivity() {
             categoryDao.getAllCategories().collect { categories ->
                 categoryList.clear()
                 categoryList.addAll(categories)
-                // 设置Spinner适配器
                 val adapter = ArrayAdapter(
                     this@MainActivity,
                     android.R.layout.simple_spinner_item,
@@ -161,7 +168,6 @@ class MainActivity : AppCompatActivity() {
     fun initRecyclerView() {
         val recyclerView = findViewById<RecyclerView>(R.id.historyRecyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
-        // 初始化适配器（含删除、编辑回调）
         recordAdapter = RecordAdapter(
             onDeleteClick = { record ->
                 lifecycleScope.launch {
@@ -170,7 +176,6 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             onEditClick = { record ->
-                // 弹出编辑对话框
                 val editText = EditText(this@MainActivity)
                 editText.setText(record.content)
                 AlertDialog.Builder(this@MainActivity)
@@ -188,6 +193,14 @@ class MainActivity : AppCompatActivity() {
                     }
                     .setNegativeButton("取消", null)
                     .show()
+            },
+            onTopClick = { record ->
+                val updatedRecord = record.copy(isTop = !record.isTop)
+                lifecycleScope.launch {
+                    recordDao.updateRecord(updatedRecord)
+                    val tip = if (updatedRecord.isTop) "置顶成功" else "取消置顶成功"
+                    Toast.makeText(this@MainActivity, tip, Toast.LENGTH_SHORT).show()
+                }
             }
         )
         recyclerView.adapter = recordAdapter
@@ -203,28 +216,32 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            // 获取选中的分类
             val selectedCategory = categoryList[categorySpinner.selectedItemPosition]
-            // 创建新记录
             val newRecord = Record(
                 id = UUID.randomUUID().toString(),
                 content = inputText,
                 time = System.currentTimeMillis(),
-                categoryId = selectedCategory.categoryId
+                categoryId = selectedCategory.categoryId,
+                imagePath = selectedImagePath,
+                isTop = false
             )
 
-            // 插入数据库
             lifecycleScope.launch {
                 recordDao.insertRecord(newRecord)
                 val allRecords = recordDao.getAllRecords().first()
                 Log.d("RoomTest", "当前记录数：${allRecords.size}")
             }
 
-            // 跳转第二页
             val intent = Intent(this, SecondActivity::class.java)
             intent.putExtra("input_data", inputText)
             startActivity(intent)
             inputEditText.text.clear()
+            selectedImagePath = null
+        }
+
+        // 添加图片按钮
+        findViewById<Button>(R.id.addImageButton).setOnClickListener {
+            checkImagePermissionAndPick()
         }
 
         // 分类筛选按钮
@@ -241,7 +258,6 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "请输入搜索关键词", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            // 搜索记录
             lifecycleScope.launch {
                 recordDao.searchRecords(keyword).collect { records ->
                     recordAdapter.submitList(records)
@@ -262,18 +278,76 @@ class MainActivity : AppCompatActivity() {
 
         // 导出按钮
         findViewById<Button>(R.id.exportButton).setOnClickListener {
-            // 检查存储权限
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                    REQUEST_STORAGE_PERMISSION
-                )
-            } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Android 10及以上不需要存储权限
                 exportRecordsToTxt()
+            } else {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED
+                ) {
+                    ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                        REQUEST_STORAGE_PERMISSION
+                    )
+                }
             }
+        }
+
+        // 统计按钮
+        findViewById<Button>(R.id.statisticsButton).setOnClickListener {
+            val intent = Intent(this, StatisticsActivity::class.java)
+            startActivity(intent)
+        }
+
+        // 在MainActivity中修改主题切换部分
+        findViewById<Button>(R.id.themeButton).setOnClickListener {
+            val sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE)
+            val currentTheme = sp.getInt(PREF_THEME, THEME_LIGHT)
+            val newTheme = if (currentTheme == THEME_LIGHT) THEME_DARK else THEME_LIGHT
+
+            // 保存主题设置
+            sp.edit().putInt(PREF_THEME, newTheme).apply()
+
+            // 应用新主题
+            delegate.localNightMode = if (newTheme == THEME_DARK) {
+                AppCompatDelegate.MODE_NIGHT_YES
+            } else {
+                AppCompatDelegate.MODE_NIGHT_NO
+            }
+            recreate() // 重建Activity使主题生效
+        }
+    }
+
+    // 修改 checkImagePermissionAndPick() 中的打开相册部分
+    private fun checkImagePermissionAndPick() {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+        if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(permission), REQUEST_IMAGE_PICK)
+            return
+        }
+
+        // 改用 ACTION_PICK 意图打开相册
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+        intent.type = "image/*"
+        pickImageLauncher.launch(intent)
+    }
+
+    // 工具方法：Uri转文件路径
+    private fun getRealPathFromUri(uri: Uri): String? {
+        val projection = arrayOf(MediaStore.Images.Media.DATA)
+        val cursor: Cursor? = contentResolver.query(uri, projection, null, null, null)
+        return cursor?.let {
+            val columnIndex = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
+            it.moveToFirst()
+            val path = it.getString(columnIndex)
+            it.close()
+            path
         }
     }
 
@@ -304,28 +378,52 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
 
-            // 构建导出内容
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA)
             val sb = StringBuilder()
-            sb.append("学习笔记记录导出 - ${Date(System.currentTimeMillis())}\n")
+            sb.append("我的笔记导出 - ${sdf.format(Date())}\n")
             sb.append("==============================\n\n")
+
+            // 在循环内部添加topStr的定义
             records.forEachIndexed { index, record ->
-                val categoryName = categoryList.find { it.categoryId == record.categoryId }?.categoryName ?: "未知分类"
-                val timeStr = Date(record.time).toString()
-                sb.append("${index + 1}. 分类：$categoryName\n")
+                val categoryName = this@MainActivity.categoryList
+                    .find { it.categoryId == record.categoryId }?.categoryName ?: "未分类"
+                val timeStr = sdf.format(Date(record.time))
+                // 修复：定义topStr变量，判断记录是否置顶
+                val topStr = if (record.isTop) "【置顶】" else ""  // 假设你的Record类有isTop属性
+                val imageStr = if (!(record.imagePath.isNullOrEmpty())) "（含图片）" else ""
+
+                sb.append("${index + 1}. ${topStr}分类：${categoryName}${imageStr}\n")
                 sb.append("   内容：${record.content}\n")
-                sb.append("   时间：$timeStr\n\n")
+                sb.append("   时间：${timeStr}\n\n")
             }
 
-            // 保存到下载目录
-            val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val file = File(downloadDir, "笔记记录_${System.currentTimeMillis()}.txt")
+            // 保存文件
             try {
-                file.writeText(sb.toString(), Charsets.UTF_8)
-                Toast.makeText(
-                    this@MainActivity,
-                    "导出成功！路径：${file.absolutePath}",
-                    Toast.LENGTH_LONG
-                ).show()
+                val fileName = "笔记记录_${System.currentTimeMillis()}.txt"
+                val file = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    // Android 10及以上使用媒体目录
+                    val resolver = contentResolver
+                    val contentValues = android.content.ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                        put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOCUMENTS + "/我的笔记")
+                    }
+                    val uri = resolver.insert(MediaStore.Files.getContentUri("external"), contentValues)
+                    uri?.let {
+                        resolver.openOutputStream(it)?.use { outputStream ->
+                            outputStream.write(sb.toString().toByteArray(Charsets.UTF_8))
+                        }
+                        "$fileName 已保存到文档/我的笔记目录"
+                    } ?: "导出失败"
+                } else {
+                    // Android 10以下使用传统方式
+                    val directory = File(Environment.getExternalStorageDirectory(), "我的笔记")
+                    if (!directory.exists()) directory.mkdirs()
+                    val file = File(directory, fileName)
+                    file.writeText(sb.toString(), Charsets.UTF_8)
+                    "$fileName 已保存到SD卡/我的笔记目录"
+                }
+                Toast.makeText(this@MainActivity, file, Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Toast.makeText(
                     this@MainActivity,
@@ -343,12 +441,96 @@ class MainActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_STORAGE_PERMISSION) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                exportRecordsToTxt()
-            } else {
-                Toast.makeText(this, "需要存储权限才能导出文件", Toast.LENGTH_SHORT).show()
+        when (requestCode) {
+            REQUEST_STORAGE_PERMISSION -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    exportRecordsToTxt()
+                } else {
+                    Toast.makeText(this, "需要存储权限才能导出文件", Toast.LENGTH_SHORT).show()
+                }
+            }
+            REQUEST_IMAGE_PICK -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    checkImagePermissionAndPick()
+                } else {
+                    Toast.makeText(this, "需要图片权限才能选择图片", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
+}
+
+// 记录适配器
+class RecordAdapter(
+    private val onDeleteClick: (Record) -> Unit,
+    private val onEditClick: (Record) -> Unit,
+    private val onTopClick: (Record) -> Unit
+) : RecyclerView.Adapter<RecordAdapter.ViewHolder>() {
+
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
+    private var records = emptyList<Record>()
+
+    fun submitList(newList: List<Record>) {
+        records = newList
+        notifyDataSetChanged()
+    }
+
+    inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        val topTagTv: TextView = itemView.findViewById(R.id.topTagTextView)
+        val noteImageIv: ImageView = itemView.findViewById(R.id.noteImageIv)
+        val categoryTagTv: TextView = itemView.findViewById(R.id.categoryTagTextView)
+        val contentTv: TextView = itemView.findViewById(R.id.contentTextView)
+        val timeTv: TextView = itemView.findViewById(R.id.timeTextView)
+        val topBtn: Button = itemView.findViewById(R.id.topButton)
+        val editBtn: Button = itemView.findViewById(R.id.editButton)
+        val deleteBtn: Button = itemView.findViewById(R.id.deleteButton)
+
+        fun bind(record: Record, categoryName: String) {
+            // 置顶标识
+            if (record.isTop) {
+                topTagTv.visibility = View.VISIBLE
+                topBtn.text = itemView.context.getString(R.string.cancel_top)
+            } else {
+                topTagTv.visibility = View.GONE
+                topBtn.text = itemView.context.getString(R.string.top)
+            }
+
+            // 图片显示
+            if (!record.imagePath.isNullOrEmpty()) {
+                noteImageIv.visibility = View.VISIBLE
+                noteImageIv.setImageURI(Uri.parse(record.imagePath))
+            } else {
+                noteImageIv.visibility = View.GONE
+            }
+
+            // 分类+内容+时间
+            categoryTagTv.text = "分类：$categoryName"
+            contentTv.text = record.content
+            timeTv.text = dateFormat.format(Date(record.time))
+
+            // 点击事件
+            topBtn.setOnClickListener { onTopClick(record) }
+            editBtn.setOnClickListener { onEditClick(record) }
+            deleteBtn.setOnClickListener { onDeleteClick(record) }
+        }
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val view = LayoutInflater.from(parent.context)
+            .inflate(R.layout.item_record, parent, false)
+        return ViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        val record = records[position]
+        val context = holder.itemView.context
+        val categoryName = if (context is MainActivity) {
+            context.categoryList.find { it.categoryId == record.categoryId }?.categoryName ?: "未知分类"
+        } else {
+            "未知分类"
+        }
+        holder.bind(record, categoryName)
+    }
+
+    override fun getItemCount(): Int = records.size
 }
