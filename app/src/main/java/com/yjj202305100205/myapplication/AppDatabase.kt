@@ -5,25 +5,25 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import android.content.Context
 
-// 定义数据库版本、包含的实体类
-@Database(entities = [Record::class], version = 1, exportSchema = false)
+// 版本号从1→2，添加Category实体
+@Database(entities = [Record::class, Category::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
-    // 提供Dao接口的实现（Room自动生成）
     abstract fun recordDao(): RecordDao
+    abstract fun categoryDao(): CategoryDao // 新增分类Dao
 
-    // 单例模式
     companion object {
-        // 双重校验锁，保证线程安全
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
-                    context.applicationContext, // 用应用上下文，避免内存泄漏
+                    context.applicationContext,
                     AppDatabase::class.java,
-                    "input_record_db" // 数据库文件名
-                ).build()
+                    "input_record_db"
+                )
+                    .fallbackToDestructiveMigration() // 简单升级：删除旧库重建（适合开发阶段）
+                    .build()
                 INSTANCE = instance
                 instance
             }
