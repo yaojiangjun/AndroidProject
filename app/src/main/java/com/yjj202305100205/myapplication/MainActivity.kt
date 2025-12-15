@@ -36,11 +36,6 @@ import java.util.*
 import android.view.LayoutInflater
 import androidx.activity.result.ActivityResultLauncher
 
-// 全局常量
-const val PREF_NAME = "note_app_prefs"
-const val PREF_THEME = "theme_mode"
-const val THEME_LIGHT = 0
-const val THEME_DARK = 1
 
 class MainActivity : AppCompatActivity() {
     // 权限请求常量
@@ -62,8 +57,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pickImageLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // 初始化主题（必须在setContentView前）
-        initTheme()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
@@ -97,16 +90,7 @@ class MainActivity : AppCompatActivity() {
         setButtonClickListeners()
     }
 
-    // 初始化主题
-    private fun initTheme() {
-        val sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE)
-        val themeMode = sp.getInt(PREF_THEME, THEME_LIGHT)
-        delegate.localNightMode = if (themeMode == THEME_DARK) {
-            AppCompatDelegate.MODE_NIGHT_YES
-        } else {
-            AppCompatDelegate.MODE_NIGHT_NO
-        }
-    }
+
 
     private fun initImagePicker() {
         // 使用旧版契约处理图片选择
@@ -300,23 +284,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        // 在MainActivity中修改主题切换部分
-        findViewById<Button>(R.id.themeButton).setOnClickListener {
-            val sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE)
-            val currentTheme = sp.getInt(PREF_THEME, THEME_LIGHT)
-            val newTheme = if (currentTheme == THEME_LIGHT) THEME_DARK else THEME_LIGHT
 
-            // 保存主题设置
-            sp.edit().putInt(PREF_THEME, newTheme).apply()
-
-            // 应用新主题
-            delegate.localNightMode = if (newTheme == THEME_DARK) {
-                AppCompatDelegate.MODE_NIGHT_YES
-            } else {
-                AppCompatDelegate.MODE_NIGHT_NO
-            }
-            recreate() // 重建Activity使主题生效
-        }
     }
 
     // 修改 checkImagePermissionAndPick() 中的打开相册部分

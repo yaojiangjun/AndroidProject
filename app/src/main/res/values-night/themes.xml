@@ -1,7 +1,7 @@
+<!-- src/main/res/values-night/themes.xml -->
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.MyApplication" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+    <!-- 改为明确的深色主题父类，与values/themes.xml的深色主题对应 -->
+    <style name="Base.Theme.MyApplication" parent="Theme.MyApplication.Dark">
+        <!-- 保持其他配置不变 -->
     </style>
 </resources>
