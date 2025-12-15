@@ -35,6 +35,12 @@ interface RecordDao {
     // 统计：总记录数
     @Query("SELECT COUNT(*) FROM input_records")
     suspend fun getTotalRecordCount(): Int
+    // RecordDao 中添加排序查询
+    @Query("SELECT * FROM input_records ORDER BY time DESC")
+    suspend fun getAllSortedByTimeDesc(): List<Record>
+
+    @Query("SELECT * FROM input_records ORDER BY time ASC")
+    suspend fun getAllSortedByTimeAsc(): List<Record>
 }
 
 // 新增：分类统计数据类

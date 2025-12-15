@@ -88,6 +88,8 @@ class MainActivity : AppCompatActivity() {
         loadAllRecords()
         // 设置按钮点击事件
         setButtonClickListeners()
+        //排序
+        initSortButton()
     }
 
 
@@ -306,6 +308,7 @@ class MainActivity : AppCompatActivity() {
         pickImageLauncher.launch(intent)
     }
 
+
     // 工具方法：Uri转文件路径
     private fun getRealPathFromUri(uri: Uri): String? {
         val projection = arrayOf(MediaStore.Images.Media.DATA)
@@ -336,6 +339,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
 
     // 导出记录为TXT文件
     fun exportRecordsToTxt() {
@@ -399,6 +403,34 @@ class MainActivity : AppCompatActivity() {
                     Toast.LENGTH_SHORT
                 ).show()
             }
+        }
+    }
+    // MainActivity 中添加排序逻辑
+    private var isSortByNewest = true // 默认最新在前
+
+    private fun initSortButton() {
+        findViewById<Button>(R.id.sortButton).setOnClickListener {
+            // 添加日志：打印切换前的状态
+            Log.d("SortDebug", "切换前：isSortByNewest=$isSortByNewest")
+
+            isSortByNewest = !isSortByNewest // 取反
+
+            // 添加日志：打印切换后的状态
+            Log.d("SortDebug", "切换后：isSortByNewest=$isSortByNewest")
+
+            loadRecordsWithSort()
+        }
+    }
+
+    // 带排序的查询
+    private fun loadRecordsWithSort() {
+        lifecycleScope.launch {
+            val sortedRecords = if (isSortByNewest) {
+                recordDao.getAllSortedByTimeDesc() // 降序（最新在前）
+            } else {
+                recordDao.getAllSortedByTimeAsc() // 升序（最早在前）
+            }
+            recordAdapter.submitList(sortedRecords)
         }
     }
 
@@ -501,4 +533,5 @@ class RecordAdapter(
     }
 
     override fun getItemCount(): Int = records.size
+
 }

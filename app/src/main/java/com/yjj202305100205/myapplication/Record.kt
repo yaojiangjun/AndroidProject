@@ -20,4 +20,5 @@ data class Record(
     val categoryId: String = "default_category",
     val imagePath: String? = null, // 新增：图片路径
     val isTop: Boolean = false // 新增：是否置顶（为功能6准备）
+
 )

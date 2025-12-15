@@ -86,45 +86,49 @@
     </com.google.android.material.textfield.TextInputLayout>
 
     <!-- 功能按钮区域 -->
+
+    <!-- 统计和主题按钮 -->
     <LinearLayout
         android:id="@+id/functionLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
-        android:orientation="horizontal"
+        android:layout_marginTop="8dp"
         android:gravity="left"
-        app:layout_constraintTop_toBottomOf="@id/searchLayout">
+        android:orientation="horizontal"
+        app:layout_constraintTop_toBottomOf="@id/searchLayout"
+        tools:layout_editor_absoluteX="-12dp">
 
         <Button
             android:id="@+id/filterButton"
+            style="?attr/borderlessButtonStyle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/filter"
-            style="?attr/borderlessButtonStyle"/>
+            android:text="@string/filter" />
+
+        <Button
+            android:id="@+id/sortButton"
+            style="?attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="排序" />
 
         <Button
             android:id="@+id/searchButton"
+            style="?attr/borderlessButtonStyle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/search"
-            style="?attr/borderlessButtonStyle"/>
+            android:text="@string/search" />
 
         <Button
             android:id="@+id/clearButton"
+            style="?attr/borderlessButtonStyle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/clear"
-            style="?attr/borderlessButtonStyle"/>
+            android:text="@string/clear" />
 
-        <Button
-            android:id="@+id/exportButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/export"
-            style="?attr/borderlessButtonStyle"/>
     </LinearLayout>
 
-    <!-- 统计和主题按钮 -->
     <LinearLayout
         android:id="@+id/extraButtonLayout"
         android:layout_width="match_parent"
@@ -141,6 +145,13 @@
             android:layout_height="wrap_content"
             android:text="@string/statistics"
             style="?attr/borderlessButtonStyle"/>
+
+        <Button
+            android:id="@+id/exportButton"
+            style="?attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/export" />
 
     </LinearLayout>
 
