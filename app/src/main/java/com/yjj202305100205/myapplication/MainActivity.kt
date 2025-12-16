@@ -2,23 +2,19 @@ package com.yjj202305100205.myapplication
 
 import android.Manifest
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
-import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
-import android.util.Log
 import android.view.View
-import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -33,28 +29,33 @@ import java.io.File
 import java.nio.charset.Charset
 import java.text.SimpleDateFormat
 import java.util.*
-import android.view.LayoutInflater
-import androidx.activity.result.ActivityResultLauncher
-
 
 class MainActivity : AppCompatActivity() {
     // 权限请求常量
     private val REQUEST_STORAGE_PERMISSION = 1001
     private val REQUEST_IMAGE_PICK = 1002
+
     // Room相关
     private lateinit var recordDao: RecordDao
     private lateinit var categoryDao: CategoryDao
+
     // 控件
     private lateinit var recordAdapter: RecordAdapter
     private lateinit var categorySpinner: Spinner
     private lateinit var inputEditText: EditText
     private lateinit var searchEditText: EditText
-    // 数据
-    val categoryList = mutableListOf<Category>() // 供Adapter访问
+    private lateinit var emptyStateTv: TextView // 空状态提示
+
+    // 数据（公开获取方法，供Adapter访问）
+    private val categoryList = mutableListOf<Category>()
     private var selectedCategoryId = "default_category"
-    private var selectedImagePath: String? = null // 选中的图片路径
+    private var selectedImagePath: String? = null // 选中的图片路径（保存Uri字符串）
+
     // 图片选择器
     private lateinit var pickImageLauncher: ActivityResultLauncher<Intent>
+
+    // 排序状态
+    private var isSortByNewest = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,62 +79,67 @@ class MainActivity : AppCompatActivity() {
 
         // 初始化控件
         initViews()
-        // 初始化默认分类（首次运行）
+        // 初始化默认分类（避免重复插入）
         initDefaultCategories()
         // 初始化分类选择器
         initCategorySpinner()
-        // 初始化RecyclerView列表
+        // 初始化RecyclerView列表（使用独立Adapter）
         initRecyclerView()
-        // 加载所有记录（默认）
-        loadAllRecords()
+        // 加载所有记录（带排序）
+        loadRecordsWithSort()
         // 设置按钮点击事件
         setButtonClickListeners()
-        //排序
+        // 初始化排序按钮
         initSortButton()
     }
 
-
+    /**
+     * 供Adapter获取分类名称的方法
+     */
+    fun getCategoryName(categoryId: String): String {
+        return categoryList.find { it.categoryId == categoryId }?.categoryName ?: "未知分类"
+    }
 
     private fun initImagePicker() {
-        // 使用旧版契约处理图片选择
         pickImageLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == RESULT_OK) {
                 val uri = result.data?.data
                 uri?.let {
-                    selectedImagePath = getRealPathFromUri(it)
+                    selectedImagePath = it.toString()
                     Toast.makeText(this, "图片已选择", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
-    // 初始化所有控件
     fun initViews() {
         categorySpinner = findViewById(R.id.categorySpinner)
         inputEditText = findViewById(R.id.inputEditText)
         searchEditText = findViewById(R.id.searchEditText)
+        emptyStateTv = findViewById(R.id.emptyStateTv)
     }
 
-    // 初始化默认分类
     fun initDefaultCategories() {
         lifecycleScope.launch {
-            val categories = categoryDao.getAllCategories().first()
-            if (categories.isEmpty()) {
-                val defaultCategories = listOf(
-                    Category("default_category", "默认分类"),
-                    Category("study", "学习笔记"),
-                    Category("life", "生活记录"),
-                    Category("work", "工作备忘")
-                )
-                defaultCategories.forEach { categoryDao.insertCategory(it) }
+            val existingCategories = categoryDao.getAllCategories().first()
+            val existingIds = existingCategories.map { it.categoryId }.toSet()
+
+            val defaultCategories = listOf(
+                Category("default_category", "默认分类"),
+                Category("study", "学习笔记"),
+                Category("life", "生活记录"),
+                Category("work", "工作备忘")
+            ).filter { !existingIds.contains(it.categoryId) }
+
+            if (defaultCategories.isNotEmpty()) {
+                categoryDao.insertCategories(defaultCategories)
                 categoryList.addAll(defaultCategories)
             } else {
-                categoryList.addAll(categories)
+                categoryList.addAll(existingCategories)
             }
         }
     }
 
-    // 初始化分类Spinner
     fun initCategorySpinner() {
         lifecycleScope.launch {
             categoryDao.getAllCategories().collect { categories ->
@@ -150,11 +156,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 初始化RecyclerView
     fun initRecyclerView() {
         val recyclerView = findViewById<RecyclerView>(R.id.historyRecyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recordAdapter = RecordAdapter(
+            context = this,
             onDeleteClick = { record ->
                 lifecycleScope.launch {
                     recordDao.deleteRecord(record)
@@ -163,7 +169,7 @@ class MainActivity : AppCompatActivity() {
             },
             onEditClick = { record ->
                 val intent = Intent(this@MainActivity, EditActivity::class.java)
-                intent.putExtra("record", record) // 需要让Record类实现Parcelable接口
+                intent.putExtra("record", record)
                 startActivity(intent)
             },
             onTopClick = { record ->
@@ -173,12 +179,16 @@ class MainActivity : AppCompatActivity() {
                     val tip = if (updatedRecord.isTop) "置顶成功" else "取消置顶成功"
                     Toast.makeText(this@MainActivity, tip, Toast.LENGTH_SHORT).show()
                 }
+            },
+            onItemClick = { record ->
+                val intent = Intent(this@MainActivity, DetailActivity::class.java)
+                intent.putExtra("record", record)
+                startActivity(intent)
             }
         )
         recyclerView.adapter = recordAdapter
     }
 
-    // 设置所有按钮点击事件
     fun setButtonClickListeners() {
         // 提交按钮
         findViewById<Button>(R.id.submitButton).setOnClickListener {
@@ -200,15 +210,10 @@ class MainActivity : AppCompatActivity() {
 
             lifecycleScope.launch {
                 recordDao.insertRecord(newRecord)
-                val allRecords = recordDao.getAllRecords().first()
-                Log.d("RoomTest", "当前记录数：${allRecords.size}")
+                inputEditText.text.clear()
+                selectedImagePath = null
+                loadRecordsWithSort()
             }
-
-            val intent = Intent(this, SecondActivity::class.java)
-            intent.putExtra("input_data", inputText)
-            startActivity(intent)
-            inputEditText.text.clear()
-            selectedImagePath = null
         }
 
         // 添加图片按钮
@@ -225,16 +230,19 @@ class MainActivity : AppCompatActivity() {
         // 搜索按钮
         findViewById<Button>(R.id.searchButton).setOnClickListener {
             val keyword = searchEditText.text.toString().trim()
-            if (keyword.isEmpty()) {
-                loadAllRecords()
-                Toast.makeText(this, "请输入搜索关键词", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
             lifecycleScope.launch {
-                recordDao.searchRecords(keyword).collect { records ->
-                    recordAdapter.submitList(records)
-                    if (records.isEmpty()) {
-                        Toast.makeText(this@MainActivity, "未找到相关记录", Toast.LENGTH_SHORT).show()
+                if (keyword.isEmpty()) {
+                    loadRecordsWithSort()
+                    Toast.makeText(this@MainActivity, "显示所有记录", Toast.LENGTH_SHORT).show()
+                } else {
+                    recordDao.searchRecords(keyword).collect { records ->
+                        recordAdapter.submitList(records)
+                        emptyStateTv.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
+                        Toast.makeText(
+                            this@MainActivity,
+                            "找到${records.size}条匹配记录",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
             }
@@ -242,21 +250,30 @@ class MainActivity : AppCompatActivity() {
 
         // 清空按钮
         findViewById<Button>(R.id.clearButton).setOnClickListener {
-            lifecycleScope.launch {
-                recordDao.deleteAllRecords()
-                Toast.makeText(this@MainActivity, "已清空所有历史", Toast.LENGTH_SHORT).show()
-            }
+            AlertDialog.Builder(this)
+                .setTitle("确认清空")
+                .setMessage("确定要删除所有笔记吗？此操作不可恢复！")
+                .setPositiveButton("确认") { _, _ ->
+                    lifecycleScope.launch {
+                        recordDao.deleteAllRecords()
+                        Toast.makeText(this@MainActivity, "所有记录已清空", Toast.LENGTH_SHORT).show()
+                        loadRecordsWithSort()
+                    }
+                }
+                .setNegativeButton("取消", null)
+                .show()
         }
 
         // 导出按钮
         findViewById<Button>(R.id.exportButton).setOnClickListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Android 10及以上不需要存储权限
                 exportRecordsToTxt()
             } else {
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    != PackageManager.PERMISSION_GRANTED
+                    == PackageManager.PERMISSION_GRANTED
                 ) {
+                    exportRecordsToTxt()
+                } else {
                     ActivityCompat.requestPermissions(
                         this,
                         arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
@@ -271,11 +288,8 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(this, StatisticsActivity::class.java)
             startActivity(intent)
         }
-
-
     }
 
-    // 修改 checkImagePermissionAndPick() 中的打开相册部分
     private fun checkImagePermissionAndPick() {
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_IMAGES
@@ -288,46 +302,52 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // 改用 ACTION_PICK 意图打开相册
         val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         intent.type = "image/*"
         pickImageLauncher.launch(intent)
     }
 
-
-    // 工具方法：Uri转文件路径
-    private fun getRealPathFromUri(uri: Uri): String? {
-        val projection = arrayOf(MediaStore.Images.Media.DATA)
-        val cursor: Cursor? = contentResolver.query(uri, projection, null, null, null)
-        return cursor?.let {
-            val columnIndex = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
-            it.moveToFirst()
-            val path = it.getString(columnIndex)
-            it.close()
-            path
-        }
-    }
-
-    // 加载所有记录
     fun loadAllRecords() {
         lifecycleScope.launch {
             recordDao.getAllRecords().collect { records ->
                 recordAdapter.submitList(records)
+                emptyStateTv.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
             }
         }
     }
 
-    // 按分类加载记录
     fun loadRecordsByCategory() {
         lifecycleScope.launch {
             categoryDao.getRecordsByCategory(selectedCategoryId).collect { records ->
                 recordAdapter.submitList(records)
+                emptyStateTv.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
             }
         }
     }
 
+    private fun loadRecordsWithSort() {
+        lifecycleScope.launch {
+            val sortedRecords = if (isSortByNewest) {
+                recordDao.getAllSortedByTimeDesc().first()
+            } else {
+                recordDao.getAllSortedByTimeAsc().first()
+            }
+            recordAdapter.submitList(sortedRecords)
+            emptyStateTv.visibility = if (sortedRecords.isEmpty()) View.VISIBLE else View.GONE
+        }
+    }
 
-    // 导出记录为TXT文件
+    private fun initSortButton() {
+        val sortButton = findViewById<Button>(R.id.sortButton)
+        sortButton.text = if (isSortByNewest) "最新在前" else "最早在前"
+
+        sortButton.setOnClickListener {
+            isSortByNewest = !isSortByNewest
+            sortButton.text = if (isSortByNewest) "最新在前" else "最早在前"
+            loadRecordsWithSort()
+        }
+    }
+
     fun exportRecordsToTxt() {
         lifecycleScope.launch {
             val records = recordDao.getAllRecords().first()
@@ -341,25 +361,20 @@ class MainActivity : AppCompatActivity() {
             sb.append("我的笔记导出 - ${sdf.format(Date())}\n")
             sb.append("==============================\n\n")
 
-            // 在循环内部添加topStr的定义
             records.forEachIndexed { index, record ->
-                val categoryName = this@MainActivity.categoryList
-                    .find { it.categoryId == record.categoryId }?.categoryName ?: "未分类"
+                val categoryName = getCategoryName(record.categoryId)
                 val timeStr = sdf.format(Date(record.time))
-                // 修复：定义topStr变量，判断记录是否置顶
-                val topStr = if (record.isTop) "【置顶】" else ""  // 假设你的Record类有isTop属性
-                val imageStr = if (!(record.imagePath.isNullOrEmpty())) "（含图片）" else ""
+                val topStr = if (record.isTop) "【置顶】" else ""
+                val imageStr = if (!record.imagePath.isNullOrEmpty()) "（含图片）" else ""
 
                 sb.append("${index + 1}. ${topStr}分类：${categoryName}${imageStr}\n")
                 sb.append("   内容：${record.content}\n")
                 sb.append("   时间：${timeStr}\n\n")
             }
 
-            // 保存文件
             try {
                 val fileName = "笔记记录_${System.currentTimeMillis()}.txt"
-                val file = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    // Android 10及以上使用媒体目录
+                val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     val resolver = contentResolver
                     val contentValues = android.content.ContentValues().apply {
                         put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
@@ -371,56 +386,22 @@ class MainActivity : AppCompatActivity() {
                         resolver.openOutputStream(it)?.use { outputStream ->
                             outputStream.write(sb.toString().toByteArray(Charsets.UTF_8))
                         }
-                        "$fileName 已保存到文档/我的笔记目录"
+                        "$fileName 已保存到：文档/我的笔记"
                     } ?: "导出失败"
                 } else {
-                    // Android 10以下使用传统方式
                     val directory = File(Environment.getExternalStorageDirectory(), "我的笔记")
                     if (!directory.exists()) directory.mkdirs()
                     val file = File(directory, fileName)
                     file.writeText(sb.toString(), Charsets.UTF_8)
-                    "$fileName 已保存到SD卡/我的笔记目录"
+                    "$fileName 已保存到：SD卡/我的笔记"
                 }
-                Toast.makeText(this@MainActivity, file, Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, result, Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
-                Toast.makeText(
-                    this@MainActivity,
-                    "导出失败：${e.message}",
-                    Toast.LENGTH_SHORT
-                ).show()
+                Toast.makeText(this@MainActivity, "导出失败：${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
-    // MainActivity 中添加排序逻辑
-    private var isSortByNewest = true // 默认最新在前
 
-    private fun initSortButton() {
-        findViewById<Button>(R.id.sortButton).setOnClickListener {
-            // 添加日志：打印切换前的状态
-            Log.d("SortDebug", "切换前：isSortByNewest=$isSortByNewest")
-
-            isSortByNewest = !isSortByNewest // 取反
-
-            // 添加日志：打印切换后的状态
-            Log.d("SortDebug", "切换后：isSortByNewest=$isSortByNewest")
-
-            loadRecordsWithSort()
-        }
-    }
-
-    // 带排序的查询
-    private fun loadRecordsWithSort() {
-        lifecycleScope.launch {
-            val sortedRecords = if (isSortByNewest) {
-                recordDao.getAllSortedByTimeDesc() // 降序（最新在前）
-            } else {
-                recordDao.getAllSortedByTimeAsc() // 升序（最早在前）
-            }
-            recordAdapter.submitList(sortedRecords)
-        }
-    }
-
-    // 权限请求回调
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -444,80 +425,4 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-}
-
-// 记录适配器
-class RecordAdapter(
-    private val onDeleteClick: (Record) -> Unit,
-    private val onEditClick: (Record) -> Unit,
-    private val onTopClick: (Record) -> Unit
-) : RecyclerView.Adapter<RecordAdapter.ViewHolder>() {
-
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
-    private var records = emptyList<Record>()
-
-    fun submitList(newList: List<Record>) {
-        records = newList
-        notifyDataSetChanged()
-    }
-
-    inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val topTagTv: TextView = itemView.findViewById(R.id.topTagTextView)
-        val noteImageIv: ImageView = itemView.findViewById(R.id.noteImageIv)
-        val categoryTagTv: TextView = itemView.findViewById(R.id.categoryTagTextView)
-        val contentTv: TextView = itemView.findViewById(R.id.contentTextView)
-        val timeTv: TextView = itemView.findViewById(R.id.timeTextView)
-        val topBtn: Button = itemView.findViewById(R.id.topButton)
-        val editBtn: Button = itemView.findViewById(R.id.editButton)
-        val deleteBtn: Button = itemView.findViewById(R.id.deleteButton)
-
-        fun bind(record: Record, categoryName: String) {
-            // 置顶标识
-            if (record.isTop) {
-                topTagTv.visibility = View.VISIBLE
-                topBtn.text = itemView.context.getString(R.string.cancel_top)
-            } else {
-                topTagTv.visibility = View.GONE
-                topBtn.text = itemView.context.getString(R.string.top)
-            }
-
-            // 图片显示
-            if (!record.imagePath.isNullOrEmpty()) {
-                noteImageIv.visibility = View.VISIBLE
-                noteImageIv.setImageURI(Uri.parse(record.imagePath))
-            } else {
-                noteImageIv.visibility = View.GONE
-            }
-
-            // 分类+内容+时间
-            categoryTagTv.text = "分类：$categoryName"
-            contentTv.text = record.content
-            timeTv.text = dateFormat.format(Date(record.time))
-
-            // 点击事件
-            topBtn.setOnClickListener { onTopClick(record) }
-            editBtn.setOnClickListener { onEditClick(record) }
-            deleteBtn.setOnClickListener { onDeleteClick(record) }
-        }
-    }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_record, parent, false)
-        return ViewHolder(view)
-    }
-
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val record = records[position]
-        val context = holder.itemView.context
-        val categoryName = if (context is MainActivity) {
-            context.categoryList.find { it.categoryId == record.categoryId }?.categoryName ?: "未知分类"
-        } else {
-            "未知分类"
-        }
-        holder.bind(record, categoryName)
-    }
-
-    override fun getItemCount(): Int = records.size
-
 }

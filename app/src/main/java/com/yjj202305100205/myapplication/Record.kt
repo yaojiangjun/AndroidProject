@@ -21,6 +21,7 @@ data class Record(
     val content: String,
     val time: Long,
     val categoryId: String = "default_category",
-    val imagePath: String? = null,
+    //val imagePaths: List<String> = emptyList(), // 改为列表
+    val imagePath: String? = null, // 确保存在该字
     val isTop: Boolean = false
 ) : Parcelable // 实现Parcelable接口

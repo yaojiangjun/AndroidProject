@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "com.yjj202305100205.myapplication"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.yjj202305100205.myapplication"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -41,6 +41,7 @@ dependencies {
     implementation(libs.material)  // 这行对应Material3依赖，无需额外写坐标
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
+    implementation(libs.androidx.recyclerview)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -52,4 +53,6 @@ dependencies {
     kapt("androidx.room:room-compiler:$roomVersion")
 
     implementation ("org.jetbrains.kotlin:kotlin-parcelize-runtime:1.9.0")
+    implementation ("com.github.bumptech.glide:glide:4.15.1")
+    annotationProcessor ("com.github.bumptech.glide:compiler:4.15.1")
 }

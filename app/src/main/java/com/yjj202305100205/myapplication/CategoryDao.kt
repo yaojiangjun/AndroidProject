@@ -15,7 +15,17 @@ interface CategoryDao {
     @Query("SELECT * FROM categories")
     fun getAllCategories(): Flow<List<Category>>
 
+    @Insert // 新增：批量插入分类
+    suspend fun insertCategories(categories: List<Category>)
+
     // 根据分类ID查询记录
     @Query("SELECT * FROM input_records WHERE categoryId = :categoryId ORDER BY time DESC")
     fun getRecordsByCategory(categoryId: String): Flow<List<Record>>
+    @Query("SELECT c.categoryName, COUNT(r.id) AS count " +
+            "FROM categories c " +
+            "LEFT JOIN input_records r ON c.categoryId = r.categoryId " +
+            "GROUP BY c.categoryId")
+    fun getCategoryCounts(): Flow<List<CategoryCount>>
+
+
 }

@@ -18,13 +18,6 @@ interface RecordDao {
     @Query("DELETE FROM input_records")
     suspend fun deleteAllRecords()
 
-    // 按置顶+时间排序（置顶的在前）
-    @Query("SELECT * FROM input_records ORDER BY isTop DESC, time DESC")
-    fun getAllRecords(): Flow<List<Record>>
-
-    @Query("SELECT * FROM input_records WHERE content LIKE '%' || :keyword || '%' ORDER BY isTop DESC, time DESC")
-    fun searchRecords(keyword: String): Flow<List<Record>>
-
     @Update
     suspend fun updateRecord(record: Record)
 
@@ -36,11 +29,24 @@ interface RecordDao {
     @Query("SELECT COUNT(*) FROM input_records")
     suspend fun getTotalRecordCount(): Int
     // RecordDao 中添加排序查询
-    @Query("SELECT * FROM input_records ORDER BY time DESC")
-    suspend fun getAllSortedByTimeDesc(): List<Record>
+    // 所有记录（按置顶+时间降序）
+    @Query("SELECT * FROM input_records ORDER BY isTop DESC, time DESC")
+    fun getAllSortedByTimeDesc(): Flow<List<Record>>
 
-    @Query("SELECT * FROM input_records ORDER BY time ASC")
-    suspend fun getAllSortedByTimeAsc(): List<Record>
+    // 所有记录（按置顶+时间升序）
+    @Query("SELECT * FROM input_records ORDER BY isTop DESC, time ASC")
+    fun getAllSortedByTimeAsc(): Flow<List<Record>>
+
+    // 按分类查询（按置顶+时间降序）
+    @Query("SELECT * FROM input_records WHERE categoryId = :categoryId ORDER BY isTop DESC, time DESC")
+    fun getByCategorySortedDesc(categoryId: String): Flow<List<Record>>
+
+    // 搜索结果（按置顶+时间降序）
+    @Query("SELECT * FROM input_records WHERE content LIKE '%' || :keyword || '%' ORDER BY isTop DESC, time DESC")
+    fun searchRecords(keyword: String): Flow<List<Record>>
+    // 添加：获取所有记录（按置顶+时间降序）
+    @Query("SELECT * FROM input_records ORDER BY isTop DESC, time DESC")
+    fun getAllRecords(): Flow<List<Record>>
 }
 
 // 新增：分类统计数据类
