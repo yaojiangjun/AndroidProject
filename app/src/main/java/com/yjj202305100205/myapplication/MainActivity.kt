@@ -162,23 +162,9 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             onEditClick = { record ->
-                val editText = EditText(this@MainActivity)
-                editText.setText(record.content)
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("编辑记录")
-                    .setView(editText)
-                    .setPositiveButton("保存") { _, _ ->
-                        val newContent = editText.text.toString().trim()
-                        if (newContent.isNotEmpty()) {
-                            val updatedRecord = record.copy(content = newContent)
-                            lifecycleScope.launch {
-                                recordDao.updateRecord(updatedRecord)
-                                Toast.makeText(this@MainActivity, "编辑成功", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                    .setNegativeButton("取消", null)
-                    .show()
+                val intent = Intent(this@MainActivity, EditActivity::class.java)
+                intent.putExtra("record", record) // 需要让Record类实现Parcelable接口
+                startActivity(intent)
             },
             onTopClick = { record ->
                 val updatedRecord = record.copy(isTop = !record.isTop)

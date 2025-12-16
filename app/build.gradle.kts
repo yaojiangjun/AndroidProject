@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.jetbrainsKotlinAndroid)
     id("kotlin-kapt")
+    id("kotlin-parcelize") // 手动添加这行
 }
 
 android {
@@ -49,4 +50,6 @@ dependencies {
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     kapt("androidx.room:room-compiler:$roomVersion")
+
+    implementation ("org.jetbrains.kotlin:kotlin-parcelize-runtime:1.9.0")
 }

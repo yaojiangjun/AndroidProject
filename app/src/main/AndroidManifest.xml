@@ -50,6 +50,10 @@
             android:name=".SecondActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication"/>
+        <activity
+            android:name=".EditActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication"/>
 
         <!-- 文件共享Provider（仅保留一个） -->
         <provider
