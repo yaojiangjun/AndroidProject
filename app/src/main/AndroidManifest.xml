@@ -4,13 +4,11 @@
     <!-- 基础权限 -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <!-- Android 13+ 图片权限 -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <!-- 相机权限（可选，如需拍照添加图片） -->
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- 网络权限（如需云同步可添加） -->
     <uses-permission android:name="android.permission.INTERNET" />
-
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <application
 
         android:allowBackup="true"

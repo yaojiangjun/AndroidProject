@@ -60,7 +60,7 @@ class RecordAdapter(
             if (!record.imagePath.isNullOrEmpty()) {
                 noteImageIv.visibility = View.VISIBLE
                 Glide.with(context)
-                    .load(Uri.parse(record.imagePath)) // 直接加载Uri字符串
+                    .load(Uri.parse(record.imagePath)) // 加载Uri字符串
                     .centerCrop()
                     .into(noteImageIv)
             } else {

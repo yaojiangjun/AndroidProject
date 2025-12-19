@@ -56,8 +56,14 @@ dependencies {
     implementation ("com.github.bumptech.glide:glide:4.15.1")
     annotationProcessor ("com.github.bumptech.glide:compiler:4.15.1")
 
-    implementation ("com.google.mlkit:text-recognition:16.0.0")
-    implementation ("com.google.mlkit:text-recognition-chinese:16.0.0") // 中文识别支持
+    // 移除原有ML Kit依赖
+    // implementation ("com.google.mlkit:text-recognition:16.0.0")
+    // implementation ("com.google.mlkit:text-recognition-chinese:16.0.0")
+
+    // 新增：网络请求（OkHttp）
+    implementation ("com.squareup.okhttp3:okhttp:4.12.0")
+    // 新增：JSON解析（Gson）
+    implementation ("com.google.code.gson:gson:2.10.1")
 
 
 }
