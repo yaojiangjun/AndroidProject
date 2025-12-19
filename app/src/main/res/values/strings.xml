@@ -25,4 +25,6 @@
     <string name="cancel_top">取消置顶</string>
     <string name="splash_name">姚姜君202305100205</string>
     <string name="category_format">分类：%s</string>
+    <!-- 置顶相关 -->
+    <string name="top_tag">置顶</string>
 </resources>

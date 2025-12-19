@@ -60,6 +60,17 @@
             android:layout_height="wrap_content"
             android:text="@string/add_image"
             style="?attr/borderlessButtonStyle"/>
+        <!-- 新增：识别图片文字按钮 -->
+        <!-- 初始禁用，选图后启用 -->
+
+        <Button
+            android:id="@+id/ocrImageButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:enabled="false"
+            android:text="文字识别"
+            style="?attr/borderlessButtonStyle"/>
 
         <Button
             android:id="@+id/submitButton"
@@ -67,6 +78,20 @@
             android:layout_height="wrap_content"
             android:text="@string/submit"
             style="?attr/borderlessButtonStyle"/>
+
+        <Button
+            android:id="@+id/sortButton"
+            style="?attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="排序" />
+
+        <Button
+            android:id="@+id/filterButton"
+            style="?attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/filter" />
     </LinearLayout>
 
     <!-- 搜索区域 -->
@@ -81,7 +106,7 @@
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/searchEditText"
             android:layout_width="match_parent"
-            android:layout_height="25dp"
+            android:layout_height="60dp"
             android:hint="@string/search_hint" />
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -100,20 +125,6 @@
         tools:layout_editor_absoluteX="-12dp">
 
         <Button
-            android:id="@+id/filterButton"
-            style="?attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/filter" />
-
-        <Button
-            android:id="@+id/sortButton"
-            style="?attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="排序" />
-
-        <Button
             android:id="@+id/searchButton"
             style="?attr/borderlessButtonStyle"
             android:layout_width="wrap_content"
@@ -127,6 +138,20 @@
             android:layout_height="wrap_content"
             android:text="@string/clear" />
 
+        <Button
+            android:id="@+id/statisticsButton"
+            style="?attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/statistics" />
+
+        <Button
+            android:id="@+id/exportButton"
+            style="?attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/export" />
+
     </LinearLayout>
 
     <LinearLayout
@@ -138,20 +163,6 @@
         android:orientation="horizontal"
         android:gravity="left"
         app:layout_constraintTop_toBottomOf="@id/functionLayout">
-
-        <Button
-            android:id="@+id/statisticsButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/statistics"
-            style="?attr/borderlessButtonStyle"/>
-
-        <Button
-            android:id="@+id/exportButton"
-            style="?attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/export" />
 
     </LinearLayout>
 

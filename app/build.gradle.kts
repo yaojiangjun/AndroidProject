@@ -55,4 +55,9 @@ dependencies {
     implementation ("org.jetbrains.kotlin:kotlin-parcelize-runtime:1.9.0")
     implementation ("com.github.bumptech.glide:glide:4.15.1")
     annotationProcessor ("com.github.bumptech.glide:compiler:4.15.1")
+
+    implementation ("com.google.mlkit:text-recognition:16.0.0")
+    implementation ("com.google.mlkit:text-recognition-chinese:16.0.0") // 中文识别支持
+
+
 }
