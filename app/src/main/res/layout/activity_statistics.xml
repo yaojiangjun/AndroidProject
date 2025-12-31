@@ -8,24 +8,24 @@
     <!-- 标题栏 -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="16dp">
+        android:layout_height="74dp"
+        android:layout_marginBottom="16dp"
+        android:gravity="center_vertical">
 
         <TextView
             android:id="@+id/backTv"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="返回"
-            android:textSize="18sp"
-            android:textColor="@color/black" />
+            android:textColor="@color/black"
+            android:textSize="22sp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
             android:text="笔记统计"
-            android:textSize="20sp"
+            android:textSize="22sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -33,7 +33,7 @@
     <TextView
         android:id="@+id/totalCountTv"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="83dp"
         android:padding="8dp"
         android:textSize="16sp" />
 
